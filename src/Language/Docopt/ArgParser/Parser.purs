@@ -125,6 +125,12 @@ token test = P.ParserT $ \(P.PState { input: toks, position: ppos }) ->
         Nothing -> P.parseFailed toks ppos "a better error message!"
     _ -> P.parseFailed toks ppos "Expected token, met EOF"
 
+lit :: Parser String
+lit = token go
+  where
+    go (Lit s) = Just s
+    go _       = Nothing
+
 eoa :: Parser Value
 eoa = token go P.<?> "--"
   where
@@ -741,8 +747,23 @@ argP options _ _ _ x = getInput >>= \i -> (
   ) <|> P.fail ("Expected " <> D.prettyPrintArg x <> butGot i)
 
   where
+  go (D.Positional pos) | length pos.choices > 0 = do
+    s <- lit
+    if s `elem` pos.choices
+      then pure $ Value.read s false
+      else do
+        P.fail $ "Invalid " <> pos.name <> ". Expected "
+          <> case reverse pos.choices of
+              Cons x xs@(Cons _ _) ->
+                "one of "
+                  <> intercalate ", " (quote <$> reverse xs)
+                  <> " or " <> quote x
+              Cons x Nil -> quote x
+          <> ", but got: " <> quote s
+    where quote = ("\"" <> _) <<< (_ <> "\"")
+
   go (D.Positional pos) = positional pos.name
-  go (D.Command    cmd) = command    cmd.name
+  go (D.Command    cmd) = command cmd.name
   go (D.Stdin         ) = stdin
   go (D.EOA           ) = eoa <|> (pure $ ArrayValue [])
   go (x@(D.Option   o)) = do

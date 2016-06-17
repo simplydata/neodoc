@@ -1,13 +1,15 @@
 module Data.String.Ext (
-    (^=), (^/=)
+    (^=), (^/=), (^=^)
   , upperCaseEq
   , notUpperCaseEq
   , endsWith
   , startsWith
+  , stripAngles
+  , posArgsEq
   ) where
 
 import Prelude
-import Data.Maybe (maybe)
+import Data.Maybe (maybe, fromMaybe)
 import Data.String as Str
 import Data.Function (on)
 
@@ -28,3 +30,13 @@ endsWith :: String -> String -> Boolean
 endsWith needle haystack = maybe false id do
   ix <- Str.lastIndexOf needle haystack
   pure $ ix == (Str.length haystack - Str.length needle)
+
+stripAngles :: String -> String
+stripAngles = stripPrefix <<< stripSuffix
+  where
+  stripPrefix s = fromMaybe s (Str.stripPrefix "<" s)
+  stripSuffix s = fromMaybe s (Str.stripSuffix ">" s)
+
+posArgsEq :: String -> String -> Boolean
+posArgsEq = eq `on` (Str.toUpper <<< stripAngles)
+infixl 9 posArgsEq as ^=^

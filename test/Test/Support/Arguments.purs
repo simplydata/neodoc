@@ -146,10 +146,10 @@ co n = Command { name: n, repeatable: false }
 
 -- short hand to create a Positional argument
 po :: String -> Argument
-po n = Positional { name: n, repeatable: false }
+po n = Positional { name: n, repeatable: false, choices: Nil }
 
 poR :: String -> Argument
-poR n = Positional { name: n, repeatable: true }
+poR n = Positional { name: n, repeatable: true, choices: Nil }
 
 -- short hand to create a end-of-arguments marker
 eoa :: Argument

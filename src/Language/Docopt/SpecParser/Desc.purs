@@ -2,6 +2,7 @@ module Language.Docopt.SpecParser.Desc (
     Desc (..)
   , Name (..)
   , OptionObj ()
+  , PositionalObj ()
   , OptionArgumentObj ()
   , getFlag
   , getName
@@ -11,6 +12,7 @@ module Language.Docopt.SpecParser.Desc (
   ) where
 
 import Prelude
+import Debug.Trace
 import Data.Tuple (Tuple (Tuple))
 import Data.Tuple (swap) as Tuple
 import Data.Functor (($>))
@@ -23,7 +25,7 @@ import Control.Alt ((<|>))
 import Control.Apply ((*>), (<*))
 import Control.MonadPlus (guard)
 import Data.List (List(..), (:), many, some, head, length, filter, catMaybes,
-                  reverse)
+                  reverse, fromList, toList)
 import Text.Parsing.Parser (ParseError, fail) as P
 import Text.Parsing.Parser.Combinators ((<?>), try, choice, lookAhead, manyTill,
                                         option, optionMaybe, notFollowedBy,
@@ -55,13 +57,19 @@ stripAngles = stripPrefix <<< stripSuffix
   stripSuffix s = fromMaybe s (Str.stripSuffix ">" s)
 
 data Desc
-  = OptionDesc OptionObj
-  | CommandDesc
+  = OptionDesc     OptionObj
+  | PositionalDesc PositionalObj
 
 data Name
   = Flag Char
   | Long String
   | Full Char String
+
+type PositionalObj = {
+  name       :: String
+, repeatable :: Boolean
+, choices    :: List String
+}
 
 type OptionObj = {
   name       :: Name
@@ -77,11 +85,22 @@ showOptionObj o = "{ name: "       <> show o.name
                <> ", repeatable: " <> show o.repeatable
                <> "}"
 
+showPositionalObj :: PositionalObj -> String
+showPositionalObj o  = "{ name: "       <> show o.name
+                    <> ", choices: "    <> show o.choices
+                    <> ", repeatable: " <> show o.repeatable
+                    <> "}"
+
 eqOptionObj :: OptionObj -> OptionObj -> Boolean
 eqOptionObj o o' = o.name                     == o'.name
                 && (OptionArgument <$> o.arg) == (OptionArgument <$> o'.arg)
                 && o.env                      == o'.env
                 && o.repeatable               == o'.repeatable
+
+eqPositionalObj :: PositionalObj -> PositionalObj -> Boolean
+eqPositionalObj p p' = p.name       == p'.name
+                    && p.choices    == p'.choices
+                    && p.repeatable == p'.repeatable
 
 type OptionArgumentObj = {
   name     :: String
@@ -124,14 +143,23 @@ getName _          = Nothing
 data Content
   = Default String
   | Env     String
+  | Choice  String
 
 isDefaultTag :: Content -> Boolean
 isDefaultTag (Default _) = true
 isDefaultTag _           = false
 
+isChoiceTag :: Content -> Boolean
+isChoiceTag (Choice _) = true
+isChoiceTag _          = false
+
 getDefaultValue :: Content -> Maybe Value
 getDefaultValue (Default v) = either (const Nothing) Just (Value.parse v true)
 getDefaultValue _           = Nothing
+
+getChoices :: Content -> List String
+getChoices (Choice s) = toList $ Str.trim <$> Str.split "," s
+getChoices _ = Nil
 
 isEnvTag :: Content -> Boolean
 isEnvTag (Env _) = true
@@ -150,39 +178,48 @@ instance eqName       :: Eq Name       where eq = gEq
 
 prettyPrintDesc :: Desc -> String
 prettyPrintDesc (OptionDesc opt) = "Option " <> prettyPrintOption opt
-prettyPrintDesc (CommandDesc) = "Command"
+prettyPrintDesc (PositionalDesc pos) = "Positional " <> prettyPrintPositional pos
 
 instance showDesc :: Show Desc where
-  show (OptionDesc o) = "OptionDesc " <> showOptionObj o
-  show (CommandDesc)  = "CommandDesc"
+  show (OptionDesc o)        = "OptionDesc "     <> showOptionObj o
+  show (PositionalDesc pos)  = "PositionalDesc " <> showPositionalObj pos
 
 instance eqDesc :: Eq Desc where
-  eq (OptionDesc o) (OptionDesc o') = eqOptionObj o o'
-  eq (CommandDesc) (CommandDesc)    = true
-  eq _             _                = false
+  eq (OptionDesc o) (OptionDesc o')         = eqOptionObj o o'
+  eq (PositionalDesc p) (PositionalDesc p') = eqPositionalObj p p'
+  eq _             _                        = false
 
 prettyPrintOption :: OptionObj -> String
 prettyPrintOption opt
   = (name opt.name) <> arg <> env
   where
-      name (Flag c)   = "-"  <> fromChar c
-      name (Long n)   = "--" <> n
-      name (Full c n) = "-"  <> fromChar c <> ", --" <> n
+  name (Flag c)   = "-"  <> fromChar c
+  name (Long n)   = "--" <> n
+  name (Full c n) = "-"  <> fromChar c <> ", --" <> n
 
-      arg = maybe "" id do
-        a <- opt.arg
-        pure $
-          (if a.optional then "[" else "")
-            <> "=" <> a.name
-            <> (if a.optional then "]" else "")
-            <> (if opt.repeatable then "..." else "")
-            <> (maybe ""
-                      (\v -> "[default: " <> prettyPrintValue v <> "]")
-                      a.default)
+  arg = maybe "" id do
+    a <- opt.arg
+    pure $
+      (if a.optional then "[" else "")
+        <> "=" <> a.name
+        <> (if a.optional then "]" else "")
+        <> (if opt.repeatable then "..." else "")
+        <> (maybe ""
+                  (\v -> "[default: " <> prettyPrintValue v <> "]")
+                  a.default)
 
-      env = maybe "" id do
-        k <- opt.env
-        pure $ " [env: " <> k <> "]"
+  env = maybe "" id do
+    k <- opt.env
+    pure $ " [env: " <> k <> "]"
+
+prettyPrintPositional :: PositionalObj -> String
+prettyPrintPositional pos = pos.name
+                        <> (if pos.repeatable then "..." else "")
+                        <> choices
+  where
+  choices = maybe "" id do
+    guard (length pos.choices > 0)
+    pure $ " [choices: " <> Str.joinWith "," (fromList pos.choices)  <> "]"
 
 prettyPrintOptionArgument :: OptionArgumentObj -> String
 prettyPrintOptionArgument { optional: o, name: n, default: d }
@@ -226,6 +263,7 @@ descParser = markIndent do
           P.choice $ P.try <$> [
             Just <<< Default <$> L.tag "default"
           , Just <<< Env     <$> L.tag "env"
+          , Just <<< Choice  <$> L.tag "choices"
           , L.anyToken $> Nothing
           ])
       <* (void L.eof <|> void (some L.newline))
@@ -247,10 +285,20 @@ descParser = markIndent do
 
     positionalsDesc :: L.TokenParser Desc
     positionalsDesc = do
-      L.angleName <|> L.shoutName
-      repeatable <- P.option false $ L.tripleDot $> true
-      descContent false
-      pure CommandDesc
+      name        <- L.angleName <|> L.shoutName
+      repeatable  <- P.option false $ L.tripleDot $> true
+      description <- descContent false
+      let choices = getChoices <$> filter isChoiceTag description
+
+      if (length choices > 1)
+         then P.fail $ name <> " has multiple [choices] tags"
+         else pure unit
+
+      pure $ PositionalDesc {
+        name:       name
+      , repeatable: repeatable
+      , choices:    fromMaybe Nil (head choices)
+      }
 
     optionDesc :: L.TokenParser Desc
     optionDesc = do

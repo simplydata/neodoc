@@ -21,7 +21,7 @@ import Data.List (findIndex, groupBy, List(..), length, filter, singleton,
 import Data.Maybe (fromMaybe, Maybe(Nothing, Just), isNothing, maybe, isJust)
 import Data.Maybe.Unsafe (fromJust)
 import Data.String (fromChar, fromCharArray, toCharArray, toUpper)
-import Data.String.Ext ((^=), endsWith)
+import Data.String.Ext ((^=), endsWith, posArgsEq, (^=^), stripAngles)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(Tuple))
 import Data.String as Str
@@ -48,17 +48,6 @@ data Slurp a
 data ResolveTo a b
   = Resolved   a
   | Unresolved b
-
-
-posArgsEq :: String -> String -> Boolean
-posArgsEq = eq `on` (Str.toUpper <<< stripAngles)
-infixl 9 posArgsEq as ^=^
-
-stripAngles :: String -> String
-stripAngles = stripPrefix <<< stripSuffix
-  where
-  stripPrefix s = fromMaybe s (Str.stripPrefix "<" s)
-  stripSuffix s = fromMaybe s (Str.stripSuffix ">" s)
 
 instance showResolveTo :: (Show a, Show b) => Show (ResolveTo a b) where
   show (Resolved   a) = "Resolved "   <> show a
@@ -191,10 +180,35 @@ solveBranch as ds = go as
                                       name:       cmd.name
                                     , repeatable: cmd.repeatable
                                     }
-    solveArg (U.Positional pos) _ = simpleResolve $ Positional {
-                                      name:       pos.name
-                                    , repeatable: pos.repeatable
-                                    }
+    solveArg (U.Positional pos) _ = do
+      -- Find a matching <positional> description, if any.
+      match <- matchDesc
+      pure  $ Resolved
+            $ Keep
+            $ singleton
+            $ Positional match
+
+      where
+        matchDesc :: Either SolveError PositionalObj
+        matchDesc =
+          case filter isMatch ds of
+            xs | length xs > 2 -> fail
+              $ "Multiple descriptions for " <> pos.name
+            (Cons (DE.PositionalDesc desc) Nil) -> do
+              pure  {
+                name:       pos.name
+              , repeatable: pos.repeatable
+              , choices:    desc.choices
+              }
+            otherwise ->
+              pure  {
+                name:       pos.name
+              , repeatable: pos.repeatable
+              , choices:    Nil
+              }
+          where
+            isMatch (DE.PositionalDesc { name = n' }) = pos.name ^=^ n'
+            isMatch _                                 = false
 
     solveArg (U.Group grp) _
       = Resolved <<< Keep <<< singleton <$> do
@@ -207,7 +221,7 @@ solveBranch as ds = go as
     solveArg (U.Option o) adjArg = do
 
       -- Find a matching option description, if any.
-      match <- matchDesc o.name
+      match <- matchDesc
 
       -- Check to see if this option has an explicitly bound argument.
       -- In this case, a check to consume an adjacent arg must not take place.
@@ -217,9 +231,9 @@ solveBranch as ds = go as
           --       the same as specified in the option descriptions for
           --       convenience to the user.
           pure  $ Resolved
-                  $ Keep
-                  $ singleton
-                  $ Option match
+                $ Keep
+                $ singleton
+                $ Option match
 
         Nothing -> do
           -- Look ahead if any of the following arguments should be slurped.
@@ -252,9 +266,9 @@ solveBranch as ds = go as
             Just er -> do
               r <- er
               pure  $ Resolved
-                      $ Slurp
-                      $ singleton
-                      $ Option $ match { repeatable = r }
+                    $ Slurp
+                    $ singleton
+                    $ Option $ match { repeatable = r }
 
       where
         guardArgs :: String -> String -> Either SolveError Boolean
@@ -263,30 +277,30 @@ solveBranch as ds = go as
           $ "Arguments mismatch for option --" <> o.name <> ": "
               <> show n <> " and " <> show n'
 
-        matchDesc :: String -> Either SolveError OptionObj
-        matchDesc n =
+        matchDesc :: Either SolveError OptionObj
+        matchDesc =
           case filter isMatch ds of
             xs | length xs > 1 -> fail
-              $ "Multiple option descriptions for option --" <> n
+              $ "Multiple option descriptions for option --" <> o.name
             (Cons (DE.OptionDesc desc) Nil) -> do
               arg <- resolveOptArg o.arg desc.arg
-              pure $ { flag:       DE.getFlag desc.name
-                       , name:       DE.getName desc.name
-                       , arg:        arg
-                       , env:        desc.env
-                       , repeatable: o.repeatable
-                       }
+              pure  { flag:       DE.getFlag desc.name
+                    , name:       DE.getName desc.name
+                    , arg:        arg
+                    , env:        desc.env
+                    , repeatable: o.repeatable
+                    }
             -- default fallback: construct the option from itself alone
-            _ -> pure
-                    $ { flag:       Nothing
-                      , name:       pure n
-                      , env:        Nothing
-                      , arg:        convertArg o.arg
-                      , repeatable: o.repeatable
-                      }
+            otherwise ->
+              pure  { flag:       Nothing
+                    , name:       pure o.name
+                    , env:        Nothing
+                    , arg:        convertArg o.arg
+                    , repeatable: o.repeatable
+                    }
           where
-            isMatch (DE.OptionDesc { name = DE.Long n'   }) = n == n'
-            isMatch (DE.OptionDesc { name = DE.Full _ n' }) = n == n'
+            isMatch (DE.OptionDesc { name = DE.Long n'   }) = o.name == n'
+            isMatch (DE.OptionDesc { name = DE.Full _ n' }) = o.name == n'
             isMatch _ = false
 
 

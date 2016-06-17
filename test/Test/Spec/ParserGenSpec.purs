@@ -710,20 +710,81 @@ parserGenSpec = \_ -> describe "The parser generator" do
            or: prog foo
         """
         [ pass
-          Nothing
-          [ "foo", "bar" ]
-          [ "<foo>" :> D.str "foo"
-          , "<bar>" :> D.str "bar" ]
+            Nothing
+            [ "foo", "bar" ]
+            [ "<foo>" :> D.str "foo"
+            , "<bar>" :> D.str "bar" ]
         , pass
-          Nothing
-          []
-          []
+            Nothing
+            []
+            []
         , pass
-          Nothing
-          [ "foo" ]
-          [ "foo" :> D.bool true ]
+            Nothing
+            [ "foo" ]
+            [ "foo" :> D.bool true ]
         ]
-      ]
+
+      -- test positional choices
+    , test
+        """
+        usage: prog <command>
+        options:
+          <command>  the command to run. [choices: foo, 200, true]
+        """
+        [ pass
+            Nothing
+            [ "foo" ]
+            [ "<command>" :> D.str "foo" ]
+        , pass
+            Nothing
+            [ "200" ]
+            [ "<command>" :> D.int 200 ]
+        , pass
+            Nothing
+            [ "true" ]
+            [ "<command>" :> D.bool true ]
+        , fail
+            Nothing
+            [ "bar" ]
+            ("Invalid <command>. Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
+        ]
+    , test
+        """
+        usage: prog <command>
+        options:
+          <command>  the command to run. [choices: foo, 200]
+        """
+        [ fail
+            Nothing
+            [ "bar" ]
+            ("Invalid <command>. Expected one of \"foo\" or \"200\""
+              <> ", but got: \"bar\"")
+        ]
+    , test
+        """
+        usage: prog <command>
+        options:
+          <command>  the command to run. [choices: foo]
+        """
+        [ fail
+            Nothing
+            [ "bar" ]
+            "Invalid <command>. Expected \"foo\", but got: \"bar\""
+        ]
+      -- empty choices are ignored
+    , test
+        """
+        usage: prog <command>
+        options:
+          <command>  the command to run. [choices: ]
+        """
+        [ pass
+            Nothing
+            [ "bar" ]
+            [ "<command>" :> D.str "bar" ]
+        ]
+    ]
 
       -- stop-at tests in various forms
       <> (A.concat $ [ TestRequired, TestOptional, TestNone ] <#> \scenario ->

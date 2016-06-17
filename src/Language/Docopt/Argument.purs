@@ -55,12 +55,14 @@ showCommandObj x
 
 type PositionalObj = { name       :: String
                      , repeatable :: Boolean
+                     , choices    :: List String
                      }
 
 showPositionalObj :: PositionalObj -> String
 showPositionalObj x
   =  "{ name: "       <> x.name
   <> ", repeatable: " <> show x.repeatable
+  <> ", choices: "    <> show x.choices
   <> "}"
 
 type GroupObj = { optional   :: Boolean
