@@ -161,7 +161,8 @@ getDefaultValue (Default v) = either (const Nothing) Just (Value.parse v true)
 getDefaultValue _           = Nothing
 
 getChoices :: Content -> List String
-getChoices (Choice s) = toList $ Str.trim <$> Str.split "," s
+getChoices (Choice s) = filter (not <<< Str.null)
+                               (toList $ Str.trim <$> Str.split "," s)
 getChoices _ = Nil
 
 isEnvTag :: Content -> Boolean
@@ -341,11 +342,20 @@ descParser = markIndent do
           env     = head envs     >>= id
           choice  = fromMaybe Nil (head choices)
 
+      -- XXX: Should this just be a warning instead?
       if (isJust default) && (isNothing xopt.arg)
          then P.fail $
           "Option " <> (show $ prettyPrintOption xopt)
                     <> " does not take arguments. "
                     <> "Cannot specify defaults."
+         else pure unit
+
+      -- XXX: Should this just be a warning instead?
+      if (isJust (head choices)) && (isNothing xopt.arg)
+         then P.fail $
+          "Option " <> (show $ prettyPrintOption xopt)
+                    <> " does not take arguments. "
+                    <> "Cannot specify choices."
          else pure unit
 
       pure $ OptionDesc $

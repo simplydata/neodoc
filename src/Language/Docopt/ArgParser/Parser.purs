@@ -21,7 +21,7 @@ import Debug.Trace
 import Control.Apply ((<*), (*>))
 import Data.Function (on)
 import Data.Bifunctor (bimap, lmap, rmap)
-import Data.Either (Either(Right, Left))
+import Data.Either (Either(Right, Left), either)
 import Data.Maybe (Maybe(..), maybe, fromMaybe, maybe', isNothing)
 import Data.List (List(..), reverse, singleton, concat, length, (:),
                   some, filter, head, fromList, sortBy, groupBy, last, null,
@@ -210,6 +210,8 @@ longOption term n a = P.ParserT $ \(P.PState { input: toks, position: pos }) ->
 
   where
     isFlag = isNothing a
+    validateArgChoice = validateChoice ("argument to --" <> n)
+                                       (maybe Nil _.choices a)
 
     -- case 0:
     -- The name is an exact match and found in 'options.stopAt'.
@@ -226,13 +228,15 @@ longOption term n a = P.ParserT $ \(P.PState { input: toks, position: pos }) ->
     -- The name is an exact match
     go (LOpt n' v) atok | (not isFlag) && (n' == n)
       = case v of
-          Just s ->
+          Just s -> do
+            validateArgChoice s
             pure { rawValue:       Just s
                  , remainder:      Nothing
                  , hasConsumedArg: false
                  }
-          _  -> case atok of
-            Just (Lit s) ->
+          otherwise -> case atok of
+            Just (Lit s) -> do
+              validateArgChoice s
               pure { rawValue:       Just s
                    , remainder:      Nothing
                    , hasConsumedArg: true
@@ -260,7 +264,8 @@ longOption term n a = P.ParserT $ \(P.PState { input: toks, position: pos }) ->
     -- provdided.
     go (LOpt n' Nothing) _ | not isFlag
       = case stripPrefix n n' of
-          Just s ->
+          Just s -> do
+            validateArgChoice s
             pure { rawValue:       Just s
                  , remainder:      Nothing
                  , hasConsumedArg: false
@@ -325,19 +330,23 @@ shortOption term f a = P.ParserT $ \(P.PState { input: toks, position: pos }) ->
 
   where
     isFlag = isNothing a
+    validateArgChoice = validateChoice ("argument to -" <> fromChar f)
+                                       (maybe Nil _.choices a)
 
     -- case 1:
     -- The leading flag matches, there are no stacked options, and an explicit
     -- argument may have been passed.
     go (SOpt f' xs v) atok | (f' == f) && (not isFlag) && (A.null xs)
       = case v of
-          Just s ->
+          Just s -> do
+            validateArgChoice s
             pure { rawValue:       Just s
                  , remainder:      Nothing
                  , hasConsumedArg: false
                  }
           otherwise -> case atok of
-            Just (Lit s) ->
+            Just (Lit s) -> do
+              validateArgChoice s
               pure { rawValue:       Just s
                    , remainder:      Nothing
                    , hasConsumedArg: true
@@ -356,6 +365,7 @@ shortOption term f a = P.ParserT $ \(P.PState { input: toks, position: pos }) ->
     go (SOpt f' xs v) _ | (f' == f) && (not isFlag) && (not $ A.null xs)
       = do
         let arg = fromCharArray xs <> maybe "" ("=" <> _) v
+        validateArgChoice arg
         pure { rawValue:       Just arg
              , remainder:      Nothing
              , hasConsumedArg: false
@@ -734,7 +744,8 @@ argP options _ _ _ x = getInput >>= \i -> (
           (Left e) -> do
             let err = unParseError e
             if ((startsWith "Option takes no argument" err.message)
-             || (startsWith "Option requires argument" err.message))
+             || (startsWith "Option requires argument" err.message)
+             || (startsWith "Invalid argument to"      err.message))
               then do
                 pure $ o {
                   result = Left $ P.ParseError $ err {
@@ -749,18 +760,7 @@ argP options _ _ _ x = getInput >>= \i -> (
   where
   go (D.Positional pos) | length pos.choices > 0 = do
     s <- lit
-    if s `elem` pos.choices
-      then pure $ Value.read s false
-      else do
-        P.fail $ "Invalid " <> pos.name <> ". Expected "
-          <> case reverse pos.choices of
-              Cons x xs@(Cons _ _) ->
-                "one of "
-                  <> intercalate ", " (quote <$> reverse xs)
-                  <> " or " <> quote x
-              Cons x Nil -> quote x
-          <> ", but got: " <> quote s
-    where quote = ("\"" <> _) <<< (_ <> "\"")
+    validateChoice' pos.name pos.choices s
 
   go (D.Positional pos) = positional pos.name
   go (D.Command    cmd) = command cmd.name
@@ -940,6 +940,22 @@ getFallbackValue env x = do
     go (D.Command cmd)    | cmd.repeatable = pure $ ArrayValue []
     go _                                   = Nothing
 
+validateChoice' :: String -> List String -> String -> Parser Value
+validateChoice' a b c = either P.fail pure (validateChoice a b c)
+
+validateChoice :: String -> List String -> String -> Either String Value
+validateChoice name choices choice =
+  if (length choices == 0) || (choice `elem` choices)
+    then pure (Value.read choice false)
+    else Left $ "Invalid " <> name <> ". Expected "
+          <> case reverse choices of
+              Cons x xs@(Cons _ _) ->
+                "one of "
+                  <> intercalate ", " (quote <$> reverse xs)
+                  <> " or " <> quote x
+              Cons x Nil -> quote x
+          <> ", but got: " <> quote choice
+  where quote = ("\"" <> _) <<< (_ <> "\"")
 
 isFrom :: Origin -> RichValue -> Boolean
 isFrom o rv = o == RValue.getOrigin rv

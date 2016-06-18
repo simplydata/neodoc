@@ -261,7 +261,7 @@ parseToken m = P.choice (P.try <$> A.concat [
         k <- fromCharArray <$> do A.many (P.noneOf [':'])
         P.char ':'
         many white
-        v <- trim <<< fromCharArray <$> do A.some $ P.noneOf [']']
+        v <- trim <<< fromCharArray <$> do A.many $ P.noneOf [']']
         many white
         pure (Tag k (Just v))
       withoutValue = do

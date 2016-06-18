@@ -749,7 +749,8 @@ parserGenSpec = \_ -> describe "The parser generator" do
             ("Invalid <command>. Expected one of \"foo\", \"200\" or \"true\""
               <> ", but got: \"bar\"")
         ]
-      -- test the erro message for only 2 elements
+
+      -- test the error message for only 2 elements
     , test
         """
         usage: prog <command>
@@ -803,6 +804,7 @@ parserGenSpec = \_ -> describe "The parser generator" do
             ("Invalid <command>. Expected one of \"foo\", \"200\" or \"true\""
               <> ", but got: \"bar\"")
         ]
+
       -- test positional choices if element is optional
     , test
         """
@@ -818,6 +820,139 @@ parserGenSpec = \_ -> describe "The parser generator" do
             Nothing
             [ "bar" ]
             ("Invalid <command>. Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
+        ]
+
+      -- test option choices
+      -- long options choices
+    , test
+        """
+        usage: prog [options]
+        options:
+          --foo=ARG  the foo. [choices: foo, 200, true]
+        """
+        [ pass Nothing [ "--foo", "foo" ]  [ "--foo" :> D.str "foo" ]
+        , pass Nothing [ "--foo", "200" ]  [ "--foo" :> D.int 200 ]
+        , pass Nothing [ "--foo", "true" ] [ "--foo" :> D.bool true ]
+        , pass Nothing [ "--foofoo" ]      [ "--foo" :> D.str "foo" ]
+        , pass Nothing [ "--foo200" ]      [ "--foo" :> D.int 200 ]
+        , pass Nothing [ "--footrue" ]     [ "--foo" :> D.bool true ]
+        , pass Nothing [ "--foo=foo" ]     [ "--foo" :> D.str "foo" ]
+        , pass Nothing [ "--foo=200" ]     [ "--foo" :> D.int 200 ]
+        , pass Nothing [ "--foo=true" ]    [ "--foo" :> D.bool true ]
+        , fail
+            Nothing
+            [ "--foo", "bar" ]
+            ("Invalid argument to --foo."
+              <> " Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
+        , fail
+            Nothing
+            [ "--foobar" ]
+            ("Invalid argument to --foo."
+              <> " Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
+        , fail
+            Nothing
+            [ "--foo=bar" ]
+            ("Invalid argument to --foo."
+              <> " Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
+        ]
+
+      -- short options choices
+    , test
+        """
+        usage: prog [options]
+        options:
+          -f ARG  the foo. [choices: foo, 200, true]
+        """
+        [ pass Nothing [ "-f", "foo" ]  [ "-f" :> D.str "foo" ]
+        , pass Nothing [ "-f", "200" ]  [ "-f" :> D.int 200 ]
+        , pass Nothing [ "-f", "true" ] [ "-f" :> D.bool true ]
+        , pass Nothing [ "-ffoo" ]      [ "-f" :> D.str "foo" ]
+        , pass Nothing [ "-f200" ]      [ "-f" :> D.int 200 ]
+        , pass Nothing [ "-ftrue" ]     [ "-f" :> D.bool true ]
+        , pass Nothing [ "-f=foo" ]     [ "-f" :> D.str "foo" ]
+        , pass Nothing [ "-f=200" ]     [ "-f" :> D.int 200 ]
+        , pass Nothing [ "-f=true" ]    [ "-f" :> D.bool true ]
+        , fail
+            Nothing
+            [ "-f", "bar" ]
+            ("Invalid argument to -f."
+              <> " Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
+        , fail
+            Nothing
+            [ "-fbar" ]
+            ("Invalid argument to -f."
+              <> " Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
+        , fail
+            Nothing
+            [ "-f=bar" ]
+            ("Invalid argument to -f."
+              <> " Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
+        ]
+
+      -- options choices via aliases
+    , test
+        """
+        usage: prog [options]
+        options:
+          -f, --foo ARG  the foo. [choices: foo, 200, true]
+        """
+        [ pass
+            Nothing
+            [ "--foo", "foo" ]
+            [ "--foo" :> D.str "foo"
+            , "-f"    :> D.str "foo" ]
+        , pass
+            Nothing
+            [ "--foo", "200" ]
+            [ "--foo" :> D.int 200
+            , "-f"    :> D.int 200 ]
+        , pass
+            Nothing
+            [ "--foo", "true" ]
+            [ "--foo" :> D.bool true
+            , "-f"    :> D.bool true ]
+        , fail
+            Nothing
+            [ "--foo", "bar" ]
+            ("Invalid argument to --foo."
+              <> " Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
+        ]
+
+      -- options choices with optional args
+    , test
+        """
+        usage: prog [options]
+        options:
+          -f, --foo[=ARG]  the foo. [choices: foo, 200, true]
+        """
+        [ pass
+            Nothing
+            [ "--foo", "foo" ]
+            [ "--foo" :> D.str "foo"
+            , "-f"    :> D.str "foo" ]
+        , pass
+            Nothing
+            [ "--foo", "200" ]
+            [ "--foo" :> D.int 200
+            , "-f"    :> D.int 200 ]
+        , pass
+            Nothing
+            [ "--foo", "true" ]
+            [ "--foo" :> D.bool true
+            , "-f"    :> D.bool true ]
+        , fail
+            Nothing
+            [ "--foo", "bar" ]
+            ("Invalid argument to --foo."
+              <> " Expected one of \"foo\", \"200\" or \"true\""
               <> ", but got: \"bar\"")
         ]
     ]
