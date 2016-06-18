@@ -749,6 +749,7 @@ parserGenSpec = \_ -> describe "The parser generator" do
             ("Invalid <command>. Expected one of \"foo\", \"200\" or \"true\""
               <> ", but got: \"bar\"")
         ]
+      -- test the erro message for only 2 elements
     , test
         """
         usage: prog <command>
@@ -761,6 +762,7 @@ parserGenSpec = \_ -> describe "The parser generator" do
             ("Invalid <command>. Expected one of \"foo\" or \"200\""
               <> ", but got: \"bar\"")
         ]
+      -- test the erro message for only 1 element
     , test
         """
         usage: prog <command>
@@ -783,6 +785,40 @@ parserGenSpec = \_ -> describe "The parser generator" do
             Nothing
             [ "bar" ]
             [ "<command>" :> D.str "bar" ]
+        ]
+      -- test positional choices if element is repeating
+    , test
+        """
+        usage: prog <command> ...
+        options:
+          <command>  the command to run. [choices: foo, 200, true]
+        """
+        [ pass
+            Nothing
+            [ "foo" ]
+            [ "<command>" :> D.array [ D.str "foo" ] ]
+        , fail
+            Nothing
+            [ "bar" ]
+            ("Invalid <command>. Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
+        ]
+      -- test positional choices if element is optional
+    , test
+        """
+        usage: prog [<command>]
+        options:
+          <command>  the command to run. [choices: foo, 200, true]
+        """
+        [ pass
+            Nothing
+            [ "foo" ]
+            [ "<command>" :>  D.str "foo" ]
+        , fail
+            Nothing
+            [ "bar" ]
+            ("Invalid <command>. Expected one of \"foo\", \"200\" or \"true\""
+              <> ", but got: \"bar\"")
         ]
     ]
 
