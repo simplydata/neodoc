@@ -167,6 +167,7 @@ parse = mkFn2 go
                       name:     a.name
                     , default:  maybe undefined F.toForeign a.default
                     , optional: a.optional
+                    , choices:  (fromList a.choices) :: Array String
                     }) x.arg
       }
     }

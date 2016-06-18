@@ -61,7 +61,7 @@ describe('neodoc', () => {
       expect(neodoc.parse(`
         Usage: foo <command> [options]
         Options:
-          -f, --foo=BAR...
+          -f, --foo=BAR... [choices: qux]
           <command>  [choices: foo, bar]
         `
       )).to.deep.equal(
@@ -93,6 +93,7 @@ describe('neodoc', () => {
                               "name": "foo",
                               "repeatable": false,
                               "env": undefined,
+                              "choices": [ "qux" ]
                               "arg": {
                                   "name": "BAR",
                                   "default": undefined,

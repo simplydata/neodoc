@@ -150,6 +150,7 @@ reduceUsage = Map.values <<< reduceBranches false <<< D.runUsage
                         name:     a.name
                       , default:  a.default  <|> a'.default
                       , optional: a.optional || a'.optional
+                      , choices:  Nil -- XXX
                       }
                     , repeatable = o.repeatable || o'.repeatable
                     })
@@ -166,6 +167,7 @@ reduceUsage = Map.values <<< reduceBranches false <<< D.runUsage
                         name:     a.name
                       , default:  a.default  <|> a'.default
                       , optional: a.optional || a'.optional
+                      , choices:  Nil -- XXX
                       }
                     , repeatable = true
                     })

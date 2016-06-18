@@ -499,6 +499,7 @@ solveBranch as ds = go as
                     $ "Multiple option descriptions for option -"
                         <> fromChar f
 
+            -- construct the option from a match
             (Cons (DE.OptionDesc desc) Nil) -> do
               arg <- if isTrailing
                           then resolveOptArg o.arg desc.arg
@@ -508,23 +509,25 @@ solveBranch as ds = go as
                               $ "Stacked option -" <> fromChar f
                                   <> " may not specify arguments"
 
-              pure $ { flag:       DE.getFlag desc.name
-                       , name:       DE.getName desc.name
-                       , arg:        arg
-                       , env:        desc.env
-                       , repeatable: o.repeatable
-                       }
+              pure
+                { flag:       DE.getFlag desc.name
+                , name:       DE.getName desc.name
+                , arg:        arg
+                , env:        desc.env
+                , repeatable: o.repeatable
+                }
 
             -- default fallback: construct the option from itself alone
-            _ -> pure
-                    $ { flag: pure f
-                      , name: Nothing
-                      , env:  Nothing
-                      , arg:  if isTrailing
-                                   then convertArg o.arg
-                                   else Nothing
-                      , repeatable: o.repeatable
-                      }
+            otherwise ->
+              pure
+                { flag: pure f
+                , name: Nothing
+                , env:  Nothing
+                , arg:  if isTrailing
+                              then convertArg o.arg
+                              else Nothing
+                , repeatable: o.repeatable
+                }
 
           where
             isMatch (DE.OptionDesc { name = DE.Flag f'   }) = f == f'
@@ -533,36 +536,45 @@ solveBranch as ds = go as
 
     -- | Resolve an option's argument name against that given in the
     -- | description, pureing the most complete argument known.
-    resolveOptArg :: Maybe { name :: String, optional :: Boolean }
+    resolveOptArg :: Maybe  { name     :: String
+                            , optional :: Boolean
+                            }
                   -> Maybe DE.OptionArgumentObj
                   -> Either SolveError (Maybe OptionArgumentObj)
 
     resolveOptArg (Just a) Nothing = do
-      pure <<< pure $ { name: a.name
-                        , optional: a.optional
-                        , default: Nothing }
+      pure <<< pure $ { name:     a.name
+                      , optional: a.optional
+                      , default:  Nothing
+                      , choices:  Nil
+                      }
 
     resolveOptArg Nothing (Just de) = do
       pure <<< pure $ { name:     de.name
-                        , optional: de.optional
-                        , default:  de.default }
+                      , optional: de.optional
+                      , default:  de.default
+                      , choices:  de.choices
+                      }
 
     resolveOptArg (Just a) (Just de) = do
-      pure <<< pure
-        $ { name:     de.name
-          , optional: de.optional || a.optional
-          , default:  de.default
-          }
+      pure <<< pure $ { name:     de.name
+                      , optional: de.optional || a.optional
+                      , default:  de.default
+                      , choices:  de.choices
+                      }
 
     resolveOptArg _ _ = pure Nothing
 
-    convertArg :: Maybe { name :: String, optional :: Boolean }
+    convertArg :: Maybe { name :: String
+                        , optional :: Boolean
+                        }
                -> Maybe OptionArgumentObj
     convertArg arg = do
       a <- arg
-      pure $ { name:     a.name
-               , optional: a.optional
-               , default:  Nothing }
+      pure $  { name:     a.name
+              , optional: a.optional
+              , choices:  Nil
+              , default:  Nothing }
 
 solveUsage :: U.Usage -> List Desc -> Either SolveError Usage
 solveUsage (U.Usage _ bs) ds = Usage <$> do traverse (flip solveBranch ds) bs

@@ -172,13 +172,15 @@ br :: (Array Argument) -> Branch
 br xs = toList xs
 
 oa :: String -> Value -> OptionArgumentObj
-oa n v =  { name: n
+oa n v =  { name:     n
           , optional: false
-          , default: Just v
+          , default:  Just v
+          , choices:  Nil
           }
 
 oa_ :: String -> OptionArgumentObj
 oa_ n = { name:     n
         , optional: false
         , default:  Nothing
+        , choices:  Nil
         }

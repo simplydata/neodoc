@@ -12,6 +12,8 @@ module Language.Docopt.Argument.Option (
   ) where
 
 import Prelude
+import Data.List (List(), length)
+import Data.Foldable (intercalate)
 import Data.Function (on)
 import Control.Apply ((*>))
 import Data.Maybe (Maybe(..), maybe)
@@ -52,18 +54,22 @@ eqOptionObj o o' = o.flag       == o'.flag
 type OptionArgumentObj = { name     :: String
                          , default  :: Maybe Value
                          , optional :: Boolean
+                         , choices  :: List String
                          }
 
 showOptionArgumentObj :: OptionArgumentObj -> String
 showOptionArgumentObj a = "{ name: "     <> show a.name
                        <> ", default: "  <> show a.default
                        <> ", optional: " <> show a.optional
+                       <> ", choices: "  <> show a.choices
+                       <> ", choices: "  <> show a.optional
                        <> "}"
 
 eqOptionArgumentObj :: OptionArgumentObj -> OptionArgumentObj -> Boolean
 eqOptionArgumentObj a a' = a.name     == a'.name
-                  && a.default  == a'.default
-                  && a.optional == a'.optional
+                        && a.default  == a'.default
+                        && a.optional == a'.optional
+                        && a.choices  == a'.choices
 
 empty :: OptionObj
 empty = { flag:       Nothing
@@ -88,7 +94,7 @@ isFlag _                                           = false
 
 prettyPrintOption :: OptionObj -> String
 prettyPrintOption o
-  = short <> long <> arg' <> rep <> default <> env
+  = short <> long <> arg' <> rep <> default <> env <> choices
   where
     short = maybe "" (\f -> "-" <> (fromChar f)) o.flag
     long  = maybe "" (const ", ") (o.flag *> o.name)
@@ -101,6 +107,10 @@ prettyPrintOption o
     default = flip (maybe "") o.arg \({ default }) ->
                 flip (maybe "") default \v->
                   " [default: " <> (prettyPrintValue v) <>  "]"
+    choices = flip (maybe "") o.arg \({ choices }) ->
+                if length choices == 0
+                  then ""
+                  else " [choices: " <> intercalate ", " choices  <>  "]"
     env = flip (maybe "") o.env \k -> " [env: " <> k <> "]"
 
 prettyPrintOptionNaked :: OptionObj -> String

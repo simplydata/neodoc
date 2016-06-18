@@ -2,6 +2,7 @@ module Test.Support.Desc where
 
 import Prelude
 import Data.Maybe (Maybe(..))
+import Data.List (List(Nil))
 
 import Language.Docopt.Value
 import Language.Docopt.SpecParser.Desc
@@ -26,4 +27,4 @@ fname :: Char -> String -> Name
 fname = Full
 
 argument :: String -> Boolean -> Maybe Value -> OptionArgumentObj
-argument n o d = { name: n, default: d, optional: o }
+argument n o d = { name: n, default: d, optional: o, choices: Nil }

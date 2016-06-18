@@ -106,18 +106,21 @@ type OptionArgumentObj = {
   name     :: String
 , default  :: Maybe Value
 , optional :: Boolean
+, choices  :: List String
 }
 
 showOptionArgumentObj :: OptionArgumentObj -> String
 showOptionArgumentObj o = "{ name: "     <> show o.name
                        <> ", default: "  <> show o.default
                        <> ", optional: " <> show o.optional
+                       <> ", choices: "  <> show o.choices
                        <> "}"
 
 eqOptionArgumentObj :: OptionArgumentObj -> OptionArgumentObj -> Boolean
 eqOptionArgumentObj a a' = a.name     == a'.name
                         && a.default  == a'.default
                         && a.optional == a'.optional
+                        && a.choices  == a'.choices
 
 newtype OptionArgument = OptionArgument OptionArgumentObj
 
@@ -197,7 +200,7 @@ prettyPrintOption opt
   name (Long n)   = "--" <> n
   name (Full c n) = "-"  <> fromChar c <> ", --" <> n
 
-  arg = maybe "" id do
+  arg = fromMaybe "" do
     a <- opt.arg
     pure $
       (if a.optional then "[" else "")
@@ -207,8 +210,11 @@ prettyPrintOption opt
         <> (maybe ""
                   (\v -> "[default: " <> prettyPrintValue v <> "]")
                   a.default)
+        <> (if length a.choices == 0
+              then ""
+              else " [choices: " <> Str.joinWith "," (fromList a.choices)  <> "]")
 
-  env = maybe "" id do
+  env = fromMaybe "" do
     k <- opt.env
     pure $ " [env: " <> k <> "]"
 
@@ -222,9 +228,12 @@ prettyPrintPositional pos = pos.name
     pure $ " [choices: " <> Str.joinWith "," (fromList pos.choices)  <> "]"
 
 prettyPrintOptionArgument :: OptionArgumentObj -> String
-prettyPrintOptionArgument { optional: o, name: n, default: d }
+prettyPrintOptionArgument { optional: o, name: n, default: d, choices: c }
   = (if o then "[" else "") <> n <> (if o then "]" else "")
     <> maybe "" (\v -> " [default: " <> (prettyPrintValue v) <>  "]") d
+    <> (if length c == 0
+          then ""
+          else " [choices: " <> Str.joinWith "," (fromList c)  <> "]")
 
 run :: String -> Either P.ParseError (List Desc)
 run = lexDescs >=> parse
@@ -308,6 +317,7 @@ descParser = markIndent do
 
       let defaults = getDefaultValue <$> filter isDefaultTag description
           envs     = getEnvKey       <$> filter isEnvTag     description
+          choices  = getChoices      <$> filter isChoiceTag  description
 
       if (length defaults > 1)
          then P.fail $
@@ -321,8 +331,15 @@ descParser = markIndent do
                     <> " has multiple environment mappings!"
          else pure unit
 
+      if (length choices > 1)
+         then P.fail $
+          "Option " <> (show $ prettyPrintOption xopt)
+                    <> " has multiple [choices] tags"
+         else pure unit
+
       let default = head defaults >>= id
           env     = head envs     >>= id
+          choice  = fromMaybe Nil (head choices)
 
       if (isJust default) && (isNothing xopt.arg)
          then P.fail $
@@ -332,13 +349,14 @@ descParser = markIndent do
          else pure unit
 
       pure $ OptionDesc $
-        xopt { env = env
-            , arg = do
-                arg <- xopt.arg
-                pure $ arg {
-                  default = default
-                }
-            }
+        xopt  { env = env
+              , arg = do
+                  arg <- xopt.arg
+                  pure $ arg {
+                    default = default
+                  , choices = choice
+                  }
+              }
 
       where
 
@@ -368,6 +386,7 @@ descParser = markIndent do
                       pure {
                         name:     a.name
                       , optional: a.optional
+                      , choices:  Nil
                       , default:  Nothing
                       }
                   , env:        Nothing
@@ -397,6 +416,7 @@ descParser = markIndent do
                       pure {
                         name:     a.name
                       , optional: a.optional
+                      , choices:  Nil
                       , default:  Nothing
                       }
                   , env:        Nothing
@@ -449,6 +469,7 @@ descParser = markIndent do
                       $ { name:     a.name
                         , optional: a.optional || a'.optional
                         , default:  a.default <|> a'.default
+                        , choices:  Nil -- No need to keep at this stage
                         }
                 combineArg Nothing  (Just b) = pure (pure b)
                 combineArg (Just a) Nothing  = pure (pure a)
