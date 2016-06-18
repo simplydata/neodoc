@@ -140,8 +140,15 @@ parse = mkFn2 go
     convArg (EOA)          = F.toForeign { type: "EOA" }
     convArg (Stdin)        = F.toForeign { type: "Stdin" }
     convArg (Command x)    = F.toForeign { type: "Command", value: x }
-    convArg (Positional x) = F.toForeign { type: "Positional", value: x }
-    convArg (Group x)      = F.toForeign {
+    convArg (Positional x) = F.toForeign {
+      type: "Positional"
+    , value: {
+        name:       x.name
+      , repeatable: x.repeatable
+      , choices:    (fromList x.choices) :: Array String
+      }
+    }
+    convArg (Group x) = F.toForeign {
       type: "Group"
     , value: {
         optional:   x.optional
@@ -149,7 +156,7 @@ parse = mkFn2 go
       , branches:   (fromList $ convBranch <$> x.branches) :: Array (Array Foreign)
       }
     }
-    convArg (Option x)     = F.toForeign {
+    convArg (Option x) = F.toForeign {
       type: "Option"
     , value: {
         flag:       maybe undefined F.toForeign x.flag

@@ -62,6 +62,7 @@ describe('neodoc', () => {
         Usage: foo <command> [options]
         Options:
           -f, --foo=BAR...
+          <command>  [choices: foo, bar]
         `
       )).to.deep.equal(
           [
@@ -71,7 +72,8 @@ describe('neodoc', () => {
                   "type": "Positional",
                   "value": {
                     "name": "<command>",
-                    "repeatable": false
+                    "repeatable": false,
+                    "choices": [ "foo", "bar" ]
                   }
                 },
                 // each expanded [options] option gets it's own group i.o.t.
