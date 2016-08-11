@@ -107,10 +107,11 @@ cached a p = P.ParserT \(s@(P.PState i _)) -> do
   maybe'
     (\_ -> do
       v <- P.unParserT p s
+      if debug then traceShowA ("cache MISS for " <> show key) else pure unit
       State.modify \s -> s { cache = Map.alter (const (pure v)) key s.cache }
       pure v
     )
-    pure
+    (\x -> (if debug then traceShowA ("cache HIT for " <> show key) else pure unit) *> pure x)
     (Map.lookup key state.cache)
 
 modifyDepth :: (Int -> Int) -> Parser Unit
@@ -275,7 +276,8 @@ spec xs options = do
           pure (vs <> vss)
         ) `catchParseError` (\e -> do
           let
-            arg = getIndexedElem (unRequired x)
+            unwrapArg = getIndexedElem <<< unRequired
+            arg = unwrapArg x
             isFixed = not <<< D.isFree
             errs' = if D.isGroup arg || not (D.isFree arg)
                         then Map.alter (const (Just e)) arg errs
@@ -286,29 +288,37 @@ spec xs options = do
             <> ", requeueing: " <> prettyPrintRequiredIndexedArg x
             <> ", length of xs: " <> show (length xs)
 
-
-          if false -- n == 0 || length xs == 0
+          if n == 0 || length xs == 0
             -- shortcut: there's no point trying again if there's nothing left
             -- to parse.
             then
               let xs' = if isFixed arg then xss else (xs <> singleton x)
                in draw xs' errs' (-1)
             else
-              let isFixed' = isFixed <<< getIndexedElem <<< unRequired
-                  xs' =
-                    if D.isFree arg
-                      then xs <> singleton x
-                      -- If a fixed, yet optional argument failed to parse, move
-                      -- on without it. We cannot requeue as it would falsify
-                      -- the relationship between all positionals.
+              let isFixed' = isFixed <<< unwrapArg
+               in if D.isFree arg
+                    then draw (xs <> singleton x) errs' (n - 1)
+                    -- If a fixed, yet optional argument failed to parse, move
+                    -- on without it. We cannot requeue as it would falsify
+                    -- the relationship between all positionals.
 
-                      -- XXX: Future work could include slicing off those
-                      -- branches in the group that are 'free' and re-queueing
-                      -- those.
-                      else if D.isOptional arg
-                            then xs
-                            else sortBy (compare `on` isFixed') xss
-               in draw xs' errs' (n - 1)
+                    -- XXX: Future work could include slicing off those
+                    -- branches in the group that are 'free' and re-queueing
+                    -- those.
+                    else if D.isOptional arg
+                          then draw xs errs' (n - 1)
+                          else
+                            let
+                              ys = sortBy (compare `on` isFixed') xss
+                              -- Check if sorting it changed anything to avoid
+                              -- needlessly going in circles.
+                              changed = (unwrapArg <$> head ys) /= (unwrapArg <$> head xss)
+                             in trace ("HAS CHANGED?: "
+                                      <> show changed <> " . "
+                                      <> (intercalate " " $ prettyPrintRequiredIndexedArg <$> ys)
+                                      <> " -vs- "
+                                      <> (intercalate " " $ prettyPrintRequiredIndexedArg <$> xss)) \_-> draw ys errs' (if changed then n - 1 else -1)
+                             -- in draw ys errs' (if changed then n - 1 else -1)
           )
 
         -- All arguments have been matched (or have failed to be matched) at least
